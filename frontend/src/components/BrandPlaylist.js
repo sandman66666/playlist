@@ -7,10 +7,10 @@ import config from '../config';
 const AddBrandForm = memo(({ onSubmit, onCancel, loading }) => {
   const [brandName, setBrandName] = useState('');
 
-  const handleSubmit = (e) => {
+  const handleSubmit = useCallback((e) => {
     e.preventDefault();
     onSubmit(brandName);
-  };
+  }, [brandName, onSubmit]);
 
   return (
     <div className="mb-8 p-6 bg-white rounded-lg shadow-md">
@@ -53,6 +53,10 @@ const AddBrandForm = memo(({ onSubmit, onCancel, loading }) => {
 
 // Separate VerifyBrandForm component
 const VerifyBrandForm = memo(({ brandProfile, brandDescription, onBack, onSubmit, loading, onDescriptionChange }) => {
+  const handleDescriptionChange = useCallback((e) => {
+    onDescriptionChange(e.target.value);
+  }, [onDescriptionChange]);
+
   return (
     <div className="mb-8 p-6 bg-white rounded-lg shadow-md">
       <h3 className="text-xl font-semibold mb-4">Verify Brand Information</h3>
@@ -63,7 +67,7 @@ const VerifyBrandForm = memo(({ brandProfile, brandDescription, onBack, onSubmit
           </label>
           <textarea
             value={brandDescription}
-            onChange={(e) => onDescriptionChange(e.target.value)}
+            onChange={handleDescriptionChange}
             className="w-full p-2 border border-gray-300 rounded-md min-h-[100px]"
             placeholder="Brand description..."
             disabled={loading}
@@ -139,6 +143,43 @@ const BrandProfileDisplay = memo(({ brandProfile }) => {
   );
 });
 
+// Separate SuggestedTracks component
+const SuggestedTracks = memo(({ suggestions, onCreatePlaylist, loading }) => {
+  if (!suggestions.length) return null;
+
+  return (
+    <div className="mb-8">
+      <h3 className="text-xl font-semibold mb-4">Suggested Tracks</h3>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {suggestions.map((s, idx) => (
+          <div key={idx} className="p-4 bg-white rounded-lg shadow-md">
+            <p className="font-medium">{s.track}</p>
+            <p className="text-sm text-gray-600">{s.artist}</p>
+            <p className="text-sm text-gray-500 mt-2">{s.reason}</p>
+            {s.spotify_data?.preview_url && (
+              <audio
+                controls
+                className="mt-2 w-full"
+                src={s.spotify_data.preview_url}
+              >
+                Your browser does not support the audio element.
+              </audio>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <button
+        onClick={onCreatePlaylist}
+        disabled={loading}
+        className="mt-6 px-6 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 disabled:bg-gray-400 w-full md:w-auto"
+      >
+        {loading ? 'Creating...' : 'Create/Update Playlist'}
+      </button>
+    </div>
+  );
+});
+
 // Main BrandPlaylist component
 function BrandPlaylist() {
   const navigate = useNavigate();
@@ -200,15 +241,26 @@ function BrandPlaylist() {
   }, [getAuthHeader, logout]);
 
   useEffect(() => {
+    let mounted = true;
+    
     if (token) {
       const loadInitialData = async () => {
-        await Promise.all([
-          fetchBrands(),
-          fetchExistingPlaylists()
-        ]);
+        try {
+          await Promise.all([
+            fetchBrands(),
+            fetchExistingPlaylists()
+          ]);
+        } catch (error) {
+          console.error('Error loading initial data:', error);
+        }
       };
+      
       loadInitialData();
     }
+    
+    return () => {
+      mounted = false;
+    };
   }, [token, fetchBrands, fetchExistingPlaylists]);
 
   const handleBrandSelect = useCallback(async (brandId) => {
@@ -340,6 +392,13 @@ function BrandPlaylist() {
     }
   }, [selectedBrand, suggestions, getAuthHeader, fetchExistingPlaylists, logout]);
 
+  const handleAddBrandClick = useCallback(() => {
+    setShowAddBrandForm(true);
+    setVerifyingBrand(false);
+    setBrandDescription('');
+    setBrandProfile(null);
+  }, []);
+
   if (!token) {
     return (
       <div className="container mx-auto px-4 py-8">
@@ -387,12 +446,7 @@ function BrandPlaylist() {
 
         {/* Add Brand Button */}
         <button
-          onClick={() => {
-            setShowAddBrandForm(!showAddBrandForm);
-            setVerifyingBrand(false);
-            setBrandDescription('');
-            setBrandProfile(null);
-          }}
+          onClick={handleAddBrandClick}
           className="text-blue-600 hover:text-blue-800 font-medium"
         >
           + Add New Brand
@@ -437,38 +491,11 @@ function BrandPlaylist() {
             <BrandProfileDisplay brandProfile={brandProfile} />
           </div>
 
-          {/* Suggested Tracks */}
-          {suggestions.length > 0 && (
-            <div className="mb-8">
-              <h3 className="text-xl font-semibold mb-4">Suggested Tracks</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {suggestions.map((s, idx) => (
-                  <div key={idx} className="p-4 bg-white rounded-lg shadow-md">
-                    <p className="font-medium">{s.track}</p>
-                    <p className="text-sm text-gray-600">{s.artist}</p>
-                    <p className="text-sm text-gray-500 mt-2">{s.reason}</p>
-                    {s.spotify_data?.preview_url && (
-                      <audio
-                        controls
-                        className="mt-2 w-full"
-                        src={s.spotify_data.preview_url}
-                      >
-                        Your browser does not support the audio element.
-                      </audio>
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              <button
-                onClick={createPlaylist}
-                disabled={loading}
-                className="mt-6 px-6 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 disabled:bg-gray-400 w-full md:w-auto"
-              >
-                {loading ? 'Creating...' : 'Create/Update Playlist'}
-              </button>
-            </div>
-          )}
+          <SuggestedTracks
+            suggestions={suggestions}
+            onCreatePlaylist={createPlaylist}
+            loading={loading}
+          />
         </>
       )}
     </div>
