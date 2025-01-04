@@ -1,8 +1,145 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, memo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import config from '../config';
 
+// Separate AddBrandForm component to prevent re-renders
+const AddBrandForm = memo(({ onSubmit, onCancel, loading }) => {
+  const [brandName, setBrandName] = useState('');
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onSubmit(brandName);
+  };
+
+  return (
+    <div className="mb-8 p-6 bg-white rounded-lg shadow-md">
+      <h3 className="text-xl font-semibold mb-4">Add New Brand</h3>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Brand Name
+          </label>
+          <input
+            type="text"
+            value={brandName}
+            onChange={(e) => setBrandName(e.target.value)}
+            className="w-full p-2 border border-gray-300 rounded-md"
+            placeholder="Enter brand name"
+            required
+            disabled={loading}
+          />
+        </div>
+        <div className="flex space-x-4">
+          <button
+            type="submit"
+            disabled={loading}
+            className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:bg-gray-400"
+          >
+            {loading ? 'Getting Description...' : 'Next'}
+          </button>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+          >
+            Cancel
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+});
+
+// Separate VerifyBrandForm component
+const VerifyBrandForm = memo(({ brandProfile, brandDescription, onBack, onSubmit, loading, onDescriptionChange }) => {
+  return (
+    <div className="mb-8 p-6 bg-white rounded-lg shadow-md">
+      <h3 className="text-xl font-semibold mb-4">Verify Brand Information</h3>
+      <div className="space-y-6">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Brand Description
+          </label>
+          <textarea
+            value={brandDescription}
+            onChange={(e) => onDescriptionChange(e.target.value)}
+            className="w-full p-2 border border-gray-300 rounded-md min-h-[100px]"
+            placeholder="Brand description..."
+            disabled={loading}
+          />
+        </div>
+
+        <BrandProfileDisplay brandProfile={brandProfile} />
+
+        <div className="flex space-x-4">
+          <button
+            onClick={onBack}
+            className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+            disabled={loading}
+          >
+            Back
+          </button>
+          <button
+            onClick={onSubmit}
+            disabled={loading}
+            className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:bg-gray-400"
+          >
+            {loading ? 'Creating...' : 'Create Brand'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+});
+
+// Separate BrandProfileDisplay component
+const BrandProfileDisplay = memo(({ brandProfile }) => {
+  if (!brandProfile) return null;
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div>
+        <h4 className="text-lg font-medium mb-2">Brand Essence</h4>
+        <div className="space-y-2">
+          <div>
+            <p className="font-medium text-sm text-gray-600">Core Identity</p>
+            <p>{brandProfile.brand_essence?.core_identity}</p>
+          </div>
+          <div>
+            <p className="font-medium text-sm text-gray-600">Brand Voice</p>
+            <p>{brandProfile.brand_essence?.brand_voice}</p>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h4 className="text-lg font-medium mb-2">Brand Values</h4>
+        <ul className="list-disc pl-5 space-y-1">
+          {brandProfile.brand_values?.map((value, idx) => (
+            <li key={idx} className="text-gray-700">{value}</li>
+          ))}
+        </ul>
+      </div>
+
+      <div>
+        <h4 className="text-lg font-medium mb-2">Target Audience</h4>
+        <p className="text-gray-700">{brandProfile.target_audience}</p>
+      </div>
+
+      <div>
+        <h4 className="text-lg font-medium mb-2">Aesthetic Pillars</h4>
+        <ul className="list-disc pl-5 space-y-1">
+          {brandProfile.aesthetic_pillars?.visual_language?.map((pillar, idx) => (
+            <li key={idx} className="text-gray-700">{pillar}</li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+});
+
+// Main BrandPlaylist component
 function BrandPlaylist() {
   const navigate = useNavigate();
   const { token, logout, getAuthHeader } = useAuth();
@@ -13,7 +150,6 @@ function BrandPlaylist() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [existingPlaylists, setExistingPlaylists] = useState([]);
-  const [newBrandName, setNewBrandName] = useState('');
   const [showAddBrandForm, setShowAddBrandForm] = useState(false);
   const [brandDescription, setBrandDescription] = useState('');
   const [verifyingBrand, setVerifyingBrand] = useState(false);
@@ -75,7 +211,7 @@ function BrandPlaylist() {
     }
   }, [token, fetchBrands, fetchExistingPlaylists]);
 
-  const handleBrandSelect = async (brandId) => {
+  const handleBrandSelect = useCallback(async (brandId) => {
     if (!brandId) return;
     try {
       setLoading(true);
@@ -98,9 +234,9 @@ function BrandPlaylist() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const handleGetBrandDescription = async () => {
+  const handleGetBrandDescription = useCallback(async (brandName) => {
     try {
       setLoading(true);
       setError('');
@@ -108,7 +244,7 @@ function BrandPlaylist() {
       const response = await fetch(`${config.apiBaseUrl}${config.endpoints.brands.describe}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ brand: newBrandName }),
+        body: JSON.stringify({ brand: brandName }),
       });
 
       if (!response.ok) {
@@ -126,10 +262,9 @@ function BrandPlaylist() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const handleCreateBrand = async (e) => {
-    e.preventDefault();
+  const handleCreateBrand = useCallback(async () => {
     try {
       setLoading(true);
       setError('');
@@ -138,7 +273,7 @@ function BrandPlaylist() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          brand: newBrandName,
+          brand: brandProfile.brand,
           description: brandDescription,
           ...brandProfile
         }),
@@ -151,7 +286,6 @@ function BrandPlaylist() {
 
       const data = await response.json();
       await fetchBrands();
-      setNewBrandName('');
       setBrandDescription('');
       setShowAddBrandForm(false);
       setVerifyingBrand(false);
@@ -162,9 +296,9 @@ function BrandPlaylist() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [brandProfile, brandDescription, fetchBrands, handleBrandSelect]);
 
-  const createPlaylist = async () => {
+  const createPlaylist = useCallback(async () => {
     try {
       setLoading(true);
       setError('');
@@ -204,61 +338,7 @@ function BrandPlaylist() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const renderBrandProfile = () => {
-    if (!brandProfile) return null;
-
-    return (
-      <div className="mb-8 p-6 bg-white rounded-lg shadow-md space-y-6">
-        <div>
-          <h3 className="text-2xl font-semibold mb-4">{brandProfile.brand}</h3>
-          {brandDescription && (
-            <p className="text-gray-600 mb-4">{brandDescription}</p>
-          )}
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <h4 className="text-lg font-medium mb-2">Brand Essence</h4>
-            <div className="space-y-2">
-              <div>
-                <p className="font-medium text-sm text-gray-600">Core Identity</p>
-                <p>{brandProfile.brand_essence?.core_identity}</p>
-              </div>
-              <div>
-                <p className="font-medium text-sm text-gray-600">Brand Voice</p>
-                <p>{brandProfile.brand_essence?.brand_voice}</p>
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <h4 className="text-lg font-medium mb-2">Brand Values</h4>
-            <ul className="list-disc pl-5 space-y-1">
-              {brandProfile.brand_values?.map((value, idx) => (
-                <li key={idx} className="text-gray-700">{value}</li>
-              ))}
-            </ul>
-          </div>
-
-          <div>
-            <h4 className="text-lg font-medium mb-2">Target Audience</h4>
-            <p className="text-gray-700">{brandProfile.target_audience}</p>
-          </div>
-
-          <div>
-            <h4 className="text-lg font-medium mb-2">Aesthetic Pillars</h4>
-            <ul className="list-disc pl-5 space-y-1">
-              {brandProfile.aesthetic_pillars?.visual_language?.map((pillar, idx) => (
-                <li key={idx} className="text-gray-700">{pillar}</li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      </div>
-    );
-  };
+  }, [selectedBrand, suggestions, getAuthHeader, fetchExistingPlaylists, logout]);
 
   if (!token) {
     return (
@@ -321,81 +401,23 @@ function BrandPlaylist() {
 
       {/* Add Brand Form */}
       {showAddBrandForm && !verifyingBrand && (
-        <div className="mb-8 p-6 bg-white rounded-lg shadow-md">
-          <h3 className="text-xl font-semibold mb-4">Add New Brand</h3>
-          <form onSubmit={(e) => { e.preventDefault(); handleGetBrandDescription(); }} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Brand Name
-              </label>
-              <input
-                type="text"
-                value={newBrandName}
-                onChange={(e) => setNewBrandName(e.target.value)}
-                className="w-full p-2 border border-gray-300 rounded-md"
-                placeholder="Enter brand name"
-                required
-                disabled={loading}
-              />
-            </div>
-            <div className="flex space-x-4">
-              <button
-                type="submit"
-                disabled={loading}
-                className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:bg-gray-400"
-              >
-                {loading ? 'Getting Description...' : 'Next'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowAddBrandForm(false)}
-                className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
-        </div>
+        <AddBrandForm
+          onSubmit={handleGetBrandDescription}
+          onCancel={() => setShowAddBrandForm(false)}
+          loading={loading}
+        />
       )}
 
       {/* Brand Verification Form */}
       {showAddBrandForm && verifyingBrand && (
-        <div className="mb-8 p-6 bg-white rounded-lg shadow-md">
-          <h3 className="text-xl font-semibold mb-4">Verify Brand Information</h3>
-          <div className="space-y-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Brand Description
-              </label>
-              <textarea
-                value={brandDescription}
-                onChange={(e) => setBrandDescription(e.target.value)}
-                className="w-full p-2 border border-gray-300 rounded-md min-h-[100px]"
-                placeholder="Brand description..."
-                disabled={loading}
-              />
-            </div>
-
-            {renderBrandProfile()}
-
-            <div className="flex space-x-4">
-              <button
-                onClick={() => setVerifyingBrand(false)}
-                className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
-                disabled={loading}
-              >
-                Back
-              </button>
-              <button
-                onClick={handleCreateBrand}
-                disabled={loading}
-                className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:bg-gray-400"
-              >
-                {loading ? 'Creating...' : 'Create Brand'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <VerifyBrandForm
+          brandProfile={brandProfile}
+          brandDescription={brandDescription}
+          onBack={() => setVerifyingBrand(false)}
+          onSubmit={handleCreateBrand}
+          loading={loading}
+          onDescriptionChange={setBrandDescription}
+        />
       )}
 
       {loading && !showAddBrandForm && (
@@ -407,7 +429,13 @@ function BrandPlaylist() {
       {/* Brand Profile Info */}
       {selectedBrand && brandProfile && !loading && !showAddBrandForm && (
         <>
-          {renderBrandProfile()}
+          <div className="mb-8 p-6 bg-white rounded-lg shadow-md">
+            <h3 className="text-2xl font-semibold mb-4">{brandProfile.brand}</h3>
+            {brandProfile.description && (
+              <p className="text-gray-600 mb-6">{brandProfile.description}</p>
+            )}
+            <BrandProfileDisplay brandProfile={brandProfile} />
+          </div>
 
           {/* Suggested Tracks */}
           {suggestions.length > 0 && (
