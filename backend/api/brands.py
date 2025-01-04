@@ -37,7 +37,8 @@ async def get_all_brands():
                 brands.append({
                     "id": file.stem,
                     "name": brand_data.get("brand", file.stem),
-                    "description": brand_data.get("brand_essence", {}).get("core_identity", "")
+                    "description": brand_data.get("description", ""),
+                    "core_identity": brand_data.get("brand_essence", {}).get("core_identity", "")
                 })
         
         return {"brands": brands}
@@ -58,6 +59,114 @@ async def get_brand_profile(brand_id: str):
         logger.error(f"Error getting brand {brand_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/describe")
+async def get_brand_description(brand_data: Dict):
+    try:
+        logger.info("Starting brand description endpoint")
+        brand_name = brand_data.get("brand")
+        if not brand_name:
+            raise HTTPException(status_code=400, detail="Brand name required")
+
+        api_key = os.getenv("ANTHROPIC_API_KEY")
+        if not api_key:
+            logger.error("ANTHROPIC_API_KEY not found")
+            raise ValueError("ANTHROPIC_API_KEY not set")
+
+        client = Anthropic(api_key=api_key.strip())
+
+        # Get brand description and profile from Claude
+        user_prompt = f"""
+You are a brand strategist. For the brand "{brand_name}":
+1. First, provide a concise 2-3 sentence description of what this company does and its market position.
+2. Then, create a detailed brand profile with the following structure:
+
+Brand Essence:
+- Core Identity: [What defines the brand at its core]
+- Brand Voice: [How the brand communicates]
+
+Brand Values:
+- [List 4-5 key values that drive the brand]
+
+Target Audience:
+- [Detailed description of primary target audience]
+
+Aesthetic Pillars:
+- Visual Language: [List 4-5 key visual elements that define the brand]
+
+Format the response as JSON with description and profile sections.
+"""
+
+        prompt = f"{HUMAN_PROMPT}{user_prompt}{AI_PROMPT}"
+        response = client.completions.create(
+            model="claude-2",
+            prompt=prompt,
+            max_tokens_to_sample=2000,
+            stop_sequences=[HUMAN_PROMPT]
+        )
+
+        # Parse the response and extract JSON
+        text_response = response.completion
+        try:
+            # Find JSON content between curly braces
+            json_start = text_response.find('{')
+            json_end = text_response.rfind('}') + 1
+            if json_start >= 0 and json_end > json_start:
+                json_content = text_response[json_start:json_end]
+                data = json.loads(json_content)
+            else:
+                # Fallback: Parse the response manually
+                description = ""
+                profile = {
+                    "brand_essence": {
+                        "core_identity": "",
+                        "brand_voice": ""
+                    },
+                    "brand_values": [],
+                    "target_audience": "",
+                    "aesthetic_pillars": {
+                        "visual_language": []
+                    }
+                }
+
+                lines = text_response.split('\n')
+                current_section = None
+                for line in lines:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    
+                    if line.startswith('Description:'):
+                        description = line.replace('Description:', '').strip()
+                    elif line.startswith('Core Identity:'):
+                        profile['brand_essence']['core_identity'] = line.replace('Core Identity:', '').strip()
+                    elif line.startswith('Brand Voice:'):
+                        profile['brand_essence']['brand_voice'] = line.replace('Brand Voice:', '').strip()
+                    elif line.startswith('Brand Values:'):
+                        current_section = 'values'
+                    elif line.startswith('Target Audience:'):
+                        profile['target_audience'] = line.replace('Target Audience:', '').strip()
+                    elif line.startswith('Visual Language:'):
+                        current_section = 'visual'
+                    elif current_section == 'values' and line.startswith('-'):
+                        profile['brand_values'].append(line.replace('-', '').strip())
+                    elif current_section == 'visual' and line.startswith('-'):
+                        profile['aesthetic_pillars']['visual_language'].append(line.replace('-', '').strip())
+
+                data = {
+                    "description": description,
+                    "profile": profile
+                }
+
+        except Exception as e:
+            logger.error(f"Error parsing Claude response: {str(e)}")
+            raise HTTPException(status_code=500, detail="Failed to parse brand profile")
+
+        return data
+
+    except Exception as e:
+        logger.error(f"Error in describe endpoint: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/suggest-music")
 async def suggest_music(brand_profile: Dict):
     try:
@@ -74,16 +183,20 @@ async def suggest_music(brand_profile: Dict):
 
         brand_name = brand_profile.get("brand", "Unknown Brand")
         core_identity = brand_profile.get("brand_essence", {}).get("core_identity", "")
+        brand_values = brand_profile.get("brand_values", [])
+        target_audience = brand_profile.get("target_audience", "")
 
         user_prompt = f"""
 You are a music curator. Suggest 10 songs that match this brand:
 Brand: {brand_name}
 Identity: {core_identity}
+Values: {', '.join(brand_values)}
+Target Audience: {target_audience}
 
 Format each suggestion as:
 Song: [title]
 Artist: [artist name]
-Why it fits: [one sentence reason]
+Why it fits: [one sentence explaining how it matches the brand values and identity]
 """
 
         prompt = f"{HUMAN_PROMPT}{user_prompt}{AI_PROMPT}"
@@ -142,8 +255,16 @@ async def create_brand_playlist(payload: Dict, authorization: str = Header(None)
         if not file_path.exists():
             raise HTTPException(status_code=404, detail=f"Brand not found: {brand_id}")
 
+        # Read existing brand profile
         with open(file_path, 'r') as f:
             brand_profile = json.load(f)
+
+        # Store suggestions in brand profile
+        brand_profile['suggested_songs'] = suggestions
+
+        # Write updated profile back to file
+        with open(file_path, 'w') as f:
+            json.dump(brand_profile, f, indent=2)
 
         # Create Spotify client with access token
         sp = spotipy.Spotify(auth=token)
@@ -186,12 +307,24 @@ async def create_brand_playlist(payload: Dict, authorization: str = Header(None)
                 query = f"track:{item['track']} artist:{item['artist']}"
                 results = sp.search(q=query, type='track', limit=1)
                 if results['tracks']['items']:
-                    new_track_uris.append(results['tracks']['items'][0]['uri'])
+                    track = results['tracks']['items'][0]
+                    new_track_uris.append(track['uri'])
+                    # Store Spotify track data in suggestions
+                    item['spotify_data'] = {
+                        'uri': track['uri'],
+                        'preview_url': track['preview_url'],
+                        'external_url': track['external_urls']['spotify']
+                    }
                 else:
                     not_found.append(f"{item['track']} by {item['artist']}")
             except Exception as e:
                 logger.error(f"Error searching for track {item['track']}: {str(e)}")
                 continue
+
+        # Update brand profile with Spotify track data
+        brand_profile['suggested_songs'] = suggestions
+        with open(file_path, 'w') as f:
+            json.dump(brand_profile, f, indent=2)
 
         if existing_playlist:
             playlist_id = existing_playlist['id']
