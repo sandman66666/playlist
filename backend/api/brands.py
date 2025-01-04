@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import logging
 import random
+import asyncio
 
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
@@ -74,26 +75,57 @@ async def get_brand_description(brand_data: Dict):
 
         client = Anthropic(api_key=api_key.strip())
 
-        # Get brand description and profile from Claude
+        # Add delay before making API call
+        await asyncio.sleep(1)
+
+        # Get brand description and profile from Claude with Gucci-like format
         user_prompt = f"""
-You are a brand strategist. For the brand "{brand_name}":
-1. First, provide a concise 2-3 sentence description of what this company does and its market position.
-2. Then, create a detailed brand profile with the following structure:
+You are a luxury brand strategist. For the brand "{brand_name}", create a detailed brand profile following this exact JSON structure:
 
-Brand Essence:
-- Core Identity: [What defines the brand at its core]
-- Brand Voice: [How the brand communicates]
+{{
+    "description": "A concise 2-3 sentence description of the brand's market position and essence",
+    "profile": {{
+        "brand_essence": {{
+            "core_identity": "One sentence capturing the brand's fundamental essence",
+            "brand_voice": "Description of how the brand communicates",
+            "brand_personality": "Key personality traits that define the brand"
+        }},
+        "brand_values": [
+            "Value 1",
+            "Value 2",
+            "Value 3",
+            "Value 4"
+        ],
+        "target_audience": {{
+            "primary": "Description of core customer segment",
+            "psychographics": "Lifestyle, values, and aspirations of target customers",
+            "demographics": "Key demographic characteristics"
+        }},
+        "aesthetic_pillars": {{
+            "visual_language": [
+                "Key visual element 1",
+                "Key visual element 2",
+                "Key visual element 3",
+                "Key visual element 4"
+            ],
+            "design_principles": [
+                "Design principle 1",
+                "Design principle 2",
+                "Design principle 3"
+            ]
+        }},
+        "brand_expression": {{
+            "tone_of_voice": "Description of brand's communication style",
+            "key_messages": [
+                "Message 1",
+                "Message 2",
+                "Message 3"
+            ]
+        }}
+    }}
+}}
 
-Brand Values:
-- [List 4-5 key values that drive the brand]
-
-Target Audience:
-- [Detailed description of primary target audience]
-
-Aesthetic Pillars:
-- Visual Language: [List 4-5 key visual elements that define the brand]
-
-Format the response as JSON with description and profile sections.
+Ensure the response is valid JSON and maintains this exact structure. Make the content sophisticated and fitting for a luxury/premium brand positioning.
 """
 
         prompt = f"{HUMAN_PROMPT}{user_prompt}{AI_PROMPT}"
@@ -103,6 +135,9 @@ Format the response as JSON with description and profile sections.
             max_tokens_to_sample=2000,
             stop_sequences=[HUMAN_PROMPT]
         )
+
+        # Add delay after API call
+        await asyncio.sleep(1)
 
         # Parse the response and extract JSON
         text_response = response.completion
@@ -114,20 +149,33 @@ Format the response as JSON with description and profile sections.
                 json_content = text_response[json_start:json_end]
                 data = json.loads(json_content)
             else:
-                # Fallback: Parse the response manually
-                description = ""
-                profile = {
-                    "brand_essence": {
-                        "core_identity": "",
-                        "brand_voice": ""
-                    },
-                    "brand_values": [],
-                    "target_audience": "",
-                    "aesthetic_pillars": {
-                        "visual_language": []
+                # Fallback structure matching Gucci format
+                data = {
+                    "description": "",
+                    "profile": {
+                        "brand_essence": {
+                            "core_identity": "",
+                            "brand_voice": "",
+                            "brand_personality": ""
+                        },
+                        "brand_values": [],
+                        "target_audience": {
+                            "primary": "",
+                            "psychographics": "",
+                            "demographics": ""
+                        },
+                        "aesthetic_pillars": {
+                            "visual_language": [],
+                            "design_principles": []
+                        },
+                        "brand_expression": {
+                            "tone_of_voice": "",
+                            "key_messages": []
+                        }
                     }
                 }
 
+                # Parse the response manually if needed
                 lines = text_response.split('\n')
                 current_section = None
                 for line in lines:
@@ -136,26 +184,12 @@ Format the response as JSON with description and profile sections.
                         continue
                     
                     if line.startswith('Description:'):
-                        description = line.replace('Description:', '').strip()
+                        data['description'] = line.replace('Description:', '').strip()
                     elif line.startswith('Core Identity:'):
-                        profile['brand_essence']['core_identity'] = line.replace('Core Identity:', '').strip()
+                        data['profile']['brand_essence']['core_identity'] = line.replace('Core Identity:', '').strip()
                     elif line.startswith('Brand Voice:'):
-                        profile['brand_essence']['brand_voice'] = line.replace('Brand Voice:', '').strip()
-                    elif line.startswith('Brand Values:'):
-                        current_section = 'values'
-                    elif line.startswith('Target Audience:'):
-                        profile['target_audience'] = line.replace('Target Audience:', '').strip()
-                    elif line.startswith('Visual Language:'):
-                        current_section = 'visual'
-                    elif current_section == 'values' and line.startswith('-'):
-                        profile['brand_values'].append(line.replace('-', '').strip())
-                    elif current_section == 'visual' and line.startswith('-'):
-                        profile['aesthetic_pillars']['visual_language'].append(line.replace('-', '').strip())
-
-                data = {
-                    "description": description,
-                    "profile": profile
-                }
+                        data['profile']['brand_essence']['brand_voice'] = line.replace('Brand Voice:', '').strip()
+                    # Add more manual parsing if needed
 
         except Exception as e:
             logger.error(f"Error parsing Claude response: {str(e)}")
@@ -180,6 +214,9 @@ async def suggest_music(brand_profile: Dict):
             
         logger.info("Got API key, initializing Anthropic client")
         client = Anthropic(api_key=api_key.strip())
+
+        # Add delay before API call
+        await asyncio.sleep(1)
 
         brand_name = brand_profile.get("brand", "Unknown Brand")
         core_identity = brand_profile.get("brand_essence", {}).get("core_identity", "")
@@ -207,6 +244,9 @@ Why it fits: [one sentence explaining how it matches the brand values and identi
             max_tokens_to_sample=1500,
             stop_sequences=[HUMAN_PROMPT]
         )
+
+        # Add delay after API call
+        await asyncio.sleep(1)
 
         text_response = response.completion
         logger.info(f"Anthropic response:\n{text_response}")
@@ -276,6 +316,9 @@ async def create_brand_playlist(payload: Dict, authorization: str = Header(None)
             logger.error(f"Error getting user profile: {str(e)}")
             raise HTTPException(status_code=401, detail="Invalid or expired token")
 
+        # Add delay before Spotify operations
+        await asyncio.sleep(1)
+
         playlist_name = f"{brand_profile['brand']} Brand Playlist"
         description = f"A curated playlist for {brand_profile['brand']}"
 
@@ -298,12 +341,17 @@ async def create_brand_playlist(payload: Dict, authorization: str = Header(None)
                 break
                 
             offset += limit
+            # Add small delay between pagination requests
+            await asyncio.sleep(0.5)
 
         # Search for new tracks
         new_track_uris = []
         not_found = []
         for item in suggestions:
             try:
+                # Add small delay between track searches
+                await asyncio.sleep(0.2)
+                
                 query = f"track:{item['track']} artist:{item['artist']}"
                 results = sp.search(q=query, type='track', limit=1)
                 if results['tracks']['items']:
@@ -337,6 +385,8 @@ async def create_brand_playlist(payload: Dict, authorization: str = Header(None)
                 current_tracks.extend([item['track']['uri'] for item in results['items'] if item['track']])
                 if results['next']:
                     results = sp.next(results)
+                    # Add small delay between pagination requests
+                    await asyncio.sleep(0.5)
                 else:
                     break
 
@@ -349,15 +399,22 @@ async def create_brand_playlist(payload: Dict, authorization: str = Header(None)
                 # Remove all current tracks and add back kept tracks + new tracks
                 logger.info(f"Replacing playlist tracks. Keeping {len(kept_tracks)} existing tracks")
                 all_tracks = kept_tracks + new_track_uris[:total_tracks - len(kept_tracks)]
+                
+                # Add delay before modifying playlist
+                await asyncio.sleep(1)
                 sp.playlist_replace_items(playlist_id, all_tracks)
             else:
                 # If playlist is empty, just add all new tracks
                 if new_track_uris:
+                    await asyncio.sleep(1)
                     sp.playlist_add_items(playlist_id, new_track_uris)
             
         else:
             logger.info("Creating new playlist")
             try:
+                # Add delay before creating playlist
+                await asyncio.sleep(1)
+                
                 new_playlist = sp.user_playlist_create(
                     user=user_id,
                     name=playlist_name,
@@ -366,6 +423,8 @@ async def create_brand_playlist(payload: Dict, authorization: str = Header(None)
                 )
                 playlist_id = new_playlist['id']
                 if new_track_uris:
+                    # Add delay before adding tracks
+                    await asyncio.sleep(1)
                     sp.playlist_add_items(playlist_id, new_track_uris)
             except Exception as e:
                 logger.error(f"Error creating playlist: {str(e)}")
