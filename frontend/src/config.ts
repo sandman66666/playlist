@@ -1,6 +1,17 @@
-interface Config {
+// src/config.ts
+interface ImportMetaEnv {
+  PROD: boolean;
+  VITE_API_URL: string;
+  VITE_SPOTIFY_REDIRECT_URI: string;
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv;
+}
+
+export interface Config {
     apiBaseUrl: string;
-    spotifyCallbackUrl: string;
+    spotifyRedirectUri: string;
     endpoints: {
       auth: {
         login: string;
@@ -10,10 +21,6 @@ interface Config {
       };
       playlist: {
         user: string;
-        details: (id: string) => string;
-        tracks: (id: string) => string;
-        addTracks: (id: string) => string;
-        removeTracks: (id: string) => string;
         search: string;
       };
       brands: {
@@ -25,13 +32,12 @@ interface Config {
     };
   }
   
-  const isProd = process.env.NODE_ENV === 'production';
-  const prodDomain = 'https://playlist-mgr-39a919ee8105-1641bf424db9.herokuapp.com';
-  const devDomain = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+  const apiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  const spotifyRedirectUri = import.meta.env.VITE_SPOTIFY_REDIRECT_URI || 'http://localhost:3000/callback';
   
   const config: Config = {
-    apiBaseUrl: isProd ? prodDomain : devDomain,
-    spotifyCallbackUrl: isProd ? `${prodDomain}/#/auth` : `${devDomain}/#/auth`,
+    apiBaseUrl,
+    spotifyRedirectUri,
     endpoints: {
       auth: {
         login: '/auth/login',
@@ -41,10 +47,6 @@ interface Config {
       },
       playlist: {
         user: '/playlist/user',
-        details: (id: string) => `/playlist/${id}`,
-        tracks: (id: string) => `/playlist/${id}/tracks`,
-        addTracks: (id: string) => `/playlist/${id}/tracks`,
-        removeTracks: (id: string) => `/playlist/${id}/tracks`,
         search: '/search/tracks'
       },
       brands: {

@@ -4,8 +4,8 @@ from typing import List, Optional, Dict
 from datetime import datetime
 from pydantic import BaseModel, Field
 
-from ..database import get_db
-from ..models import Playlist, Track, BrandProfile
+from backend.database import get_db
+from backend.models import Playlist, Track, BrandProfile, playlist_tracks
 
 router = APIRouter()
 
@@ -15,7 +15,7 @@ class PlaylistCreate(BaseModel):
     name: str
     description: Optional[str] = None
     spotify_id: Optional[str] = None
-    metadata: Optional[Dict] = Field(default_factory=dict)
+    meta_data: Optional[Dict] = Field(default_factory=dict)
 
 class PlaylistResponse(BaseModel):
     id: str
@@ -23,7 +23,7 @@ class PlaylistResponse(BaseModel):
     name: str
     description: Optional[str]
     spotify_id: Optional[str]
-    metadata: Optional[Dict]
+    meta_data: Optional[Dict]
     created_at: datetime
     updated_at: datetime
 
@@ -34,7 +34,7 @@ class TrackCreate(BaseModel):
     album: Optional[str] = None
     duration_ms: Optional[int] = None
     preview_url: Optional[str] = None
-    metadata: Optional[Dict] = Field(default_factory=dict)
+    meta_data: Optional[Dict] = Field(default_factory=dict)
 
 class TrackResponse(BaseModel):
     id: str
@@ -44,7 +44,7 @@ class TrackResponse(BaseModel):
     album: Optional[str]
     duration_ms: Optional[int]
     preview_url: Optional[str]
-    metadata: Optional[Dict]
+    meta_data: Optional[Dict]
     created_at: datetime
     updated_at: datetime
 
@@ -61,7 +61,7 @@ async def create_playlist(playlist: PlaylistCreate, db: Session = Depends(get_db
         name=playlist.name,
         description=playlist.description,
         spotify_id=playlist.spotify_id,
-        metadata=playlist.metadata
+        meta_data=playlist.meta_data
     )
     db.add(db_playlist)
     try:

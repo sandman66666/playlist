@@ -1,0 +1,15 @@
+The script options available to you:
+
+npm run dev - Starts development server with development environment
+npm run build - Creates production build
+npm run build:dev - Creates development build
+npm run preview - Preview production build locally
+npm run clean - Remove all generated files and dependencies
+npm run clean:dist - Remove only build files
+npm run typecheck - Check TypeScript types
+npm run lint - Run ESLint
+
+For Heroku deployment, the heroku-postbuild script is automatically run.
+You can test that environment variables are working by adding this to any component temporarily:
+typescriptCopyconsole.log('API URL:', import.meta.env.VITE_API_URL);
+console.log('Environment:', import.meta.env.VITE_NODE_ENV);

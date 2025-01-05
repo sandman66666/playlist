@@ -44,7 +44,7 @@ class Playlist(Base):
     name = Column(String, nullable=False)
     description = Column(String)
     spotify_id = Column(String, unique=True)  # Spotify playlist ID
-    metadata = Column(JSON)  # Additional playlist metadata
+    meta_data = Column(JSON)  # Additional playlist meta_data
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -59,7 +59,7 @@ class Playlist(Base):
             "name": self.name,
             "description": self.description,
             "spotify_id": self.spotify_id,
-            "metadata": self.metadata,
+            "meta_data": self.meta_data,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat()
         }
@@ -74,7 +74,7 @@ class Track(Base):
     album = Column(String)
     duration_ms = Column(Integer)
     preview_url = Column(String)
-    metadata = Column(JSON)  # Additional track metadata from Spotify
+    meta_data = Column(JSON)  # Additional track meta_data from Spotify
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -90,7 +90,7 @@ class Track(Base):
             "album": self.album,
             "duration_ms": self.duration_ms,
             "preview_url": self.preview_url,
-            "metadata": self.metadata,
+            "meta_data": self.meta_data,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat()
         }

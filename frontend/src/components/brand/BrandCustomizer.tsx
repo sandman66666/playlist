@@ -1,6 +1,8 @@
+// src/components/brand/BrandCustomizer.tsx
 import React, { useState } from 'react';
 import { useBrandProfile, useSuggestMusic, useCreatePlaylist } from '../../hooks/useSpotify';
-import { FormSection, Button } from '../shared/Form';
+import { FormSection } from '../shared/Form';
+import { Button } from '../shared/Button';
 import { Modal } from '../shared/Modal';
 import { BrandProfile, MusicSuggestion } from '../../types';
 import { useToast } from '../../contexts/ToastContext';
@@ -13,7 +15,6 @@ export const BrandCustomizer: React.FC<BrandCustomizerProps> = ({ brandId }) => 
   const { showToast } = useToast();
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   
-  // Queries and Mutations
   const { 
     data: brandProfile,
     isLoading: isLoadingProfile 
@@ -26,10 +27,7 @@ export const BrandCustomizer: React.FC<BrandCustomizerProps> = ({ brandId }) => 
     if (!brandProfile) return;
 
     try {
-      // First, get music suggestions
       const suggestions = await suggestMusicMutation.mutateAsync(brandProfile);
-      
-      // Then create the playlist
       const result = await createPlaylistMutation.mutateAsync({
         brandId,
         suggestions
@@ -66,22 +64,18 @@ export const BrandCustomizer: React.FC<BrandCustomizerProps> = ({ brandId }) => 
         description="Review and customize your brand's profile"
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="space-y-4">
+          <div>
             <h4 className="font-medium">Brand Essence</h4>
             <div className="bg-white p-4 rounded-lg border">
               <p className="text-sm text-gray-600">Core Identity</p>
               <p className="mt-1">{brandProfile.brand_essence.core_identity}</p>
             </div>
-            <div className="bg-white p-4 rounded-lg border">
-              <p className="text-sm text-gray-600">Brand Voice</p>
-              <p className="mt-1">{brandProfile.brand_essence.brand_voice}</p>
-            </div>
           </div>
 
-          <div className="space-y-4">
+          <div>
             <h4 className="font-medium">Visual Language</h4>
             <ul className="list-disc pl-5 space-y-2">
-              {brandProfile.aesthetic_pillars.visual_language.map((item, index) => (
+              {brandProfile.aesthetic_pillars.visual_language.map((item: string, index: number) => (
                 <li key={index} className="text-gray-700">{item}</li>
               ))}
             </ul>
@@ -89,36 +83,21 @@ export const BrandCustomizer: React.FC<BrandCustomizerProps> = ({ brandId }) => 
         </div>
       </FormSection>
 
-      {/* Music Generation */}
-      <FormSection
-        title="Music Profile"
-        description="Generate a playlist that matches your brand's identity"
-      >
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h4 className="font-medium">Music Generation</h4>
-              <p className="text-sm text-gray-500 mt-1">
-                Our AI will analyze your brand profile and suggest music that matches your identity
-              </p>
-            </div>
-            <div className="space-x-4">
-              <Button
-                variant="secondary"
-                onClick={() => setShowPreviewModal(true)}
-              >
-                Preview Settings
-              </Button>
-              <Button
-                onClick={handleGeneratePlaylist}
-                isLoading={suggestMusicMutation.isPending || createPlaylistMutation.isPending}
-              >
-                Generate Playlist
-              </Button>
-            </div>
-          </div>
-        </div>
-      </FormSection>
+      {/* Controls */}
+      <div className="flex justify-end space-x-4">
+        <Button
+          variant="secondary"
+          onClick={() => setShowPreviewModal(true)}
+        >
+          Preview Settings
+        </Button>
+        <Button
+          onClick={handleGeneratePlaylist}
+          isLoading={suggestMusicMutation.isPending || createPlaylistMutation.isPending}
+        >
+          Generate Playlist
+        </Button>
+      </div>
 
       {/* Preview Modal */}
       <Modal
@@ -126,25 +105,10 @@ export const BrandCustomizer: React.FC<BrandCustomizerProps> = ({ brandId }) => 
         onClose={() => setShowPreviewModal(false)}
         title="Music Generation Settings"
       >
-        <div className="space-y-4">
-          <div>
-            <h4 className="font-medium mb-2">Brand Elements Used for Generation</h4>
-            <ul className="list-disc pl-5 space-y-2 text-sm text-gray-600">
-              <li>Core Identity: {brandProfile.brand_essence.core_identity}</li>
-              <li>Brand Voice: {brandProfile.brand_essence.brand_voice}</li>
-              <li>
-                Visual Language: {brandProfile.aesthetic_pillars.visual_language.join(', ')}
-              </li>
-            </ul>
-          </div>
-          
-          <div>
-            <h4 className="font-medium mb-2">Generation Process</h4>
-            <p className="text-sm text-gray-600">
-              Our AI analyzes your brand's identity and matches it with musical elements
-              including tempo, mood, genre, and lyrical themes to create a cohesive playlist
-              that represents your brand.
-            </p>
+        <div className="p-4">
+          <h3 className="text-lg font-semibold mb-4">Generation Settings</h3>
+          <div className="space-y-4">
+            <p>Based on brand essence and visual language...</p>
           </div>
         </div>
       </Modal>

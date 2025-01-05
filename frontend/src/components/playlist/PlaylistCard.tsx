@@ -1,22 +1,20 @@
 import React from 'react';
-import { PlaylistTrack } from '../../types';
 
 interface PlaylistCardProps {
   id: string;
   name: string;
   images?: Array<{ url: string; height: number; width: number; }>;
-  tracksCount: number;
-  owner: string;
-  isOwner: boolean;
-  onAddTrack?: (track: PlaylistTrack) => void;
+  tracks: { total: number };
+  owner: { display_name: string };
+  isOwner?: boolean;
 }
 
 export const PlaylistCard: React.FC<PlaylistCardProps> = ({
   name,
   images,
-  tracksCount,
+  tracks,
   owner,
-  isOwner,
+  isOwner = false,
 }) => {
   return (
     <div className="bg-white rounded-lg shadow-md overflow-hidden">
@@ -38,10 +36,10 @@ export const PlaylistCard: React.FC<PlaylistCardProps> = ({
           {name}
         </h3>
         <p className="text-sm text-gray-600 mb-2">
-          {tracksCount} tracks
+          {tracks.total} tracks
         </p>
         <p className="text-xs text-gray-500">
-          {isOwner ? 'Your playlist' : `By ${owner}`}
+          {isOwner ? 'Your playlist' : `By ${owner.display_name}`}
         </p>
       </div>
     </div>

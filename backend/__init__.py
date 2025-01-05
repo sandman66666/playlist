@@ -1,6 +1,4 @@
 """
-Spotify Playlist Manager Backend Package
+Backend package initialization.
+This makes the backend directory a proper Python package.
 """
-
-from . import config
-from . import api

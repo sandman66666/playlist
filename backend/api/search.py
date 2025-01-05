@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Header
+from fastapi import APIRouter, HTTPException, Header, Depends
 from typing import Optional, Dict, List
 import httpx
 from .auth import validate_token_string
@@ -10,19 +10,8 @@ SPOTIFY_API_BASE = "https://api.spotify.com/v1"
 @router.get("/tracks", response_model=Dict[str, List[dict]])
 async def search_tracks(
     q: str,
-    authorization: str = Header(None)
+    token: str = Depends(validate_token_string)
 ):
-    if not authorization:
-        raise HTTPException(status_code=401, detail="Authorization header is required")
-
-    # Extract token from header
-    token = authorization.replace("Bearer ", "")
-
-    # Validate the token using the new helper function
-    is_valid = await validate_token_string(token)
-    if not is_valid:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
-
     try:
         # Create async HTTP client
         async with httpx.AsyncClient() as client:
@@ -35,7 +24,7 @@ async def search_tracks(
                     "limit": 20
                 },
                 headers={
-                    "Authorization": authorization
+                    "Authorization": f"Bearer {token}"
                 }
             )
             # Check if request was successful

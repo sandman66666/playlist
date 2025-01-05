@@ -1,13 +1,14 @@
 // src/hooks/useQueries.ts
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
-import { Brand, BrandProfile, MusicSuggestion } from '../types';
+import type { Brand, BrandProfile, MusicSuggestion, PlaylistTrack } from '../types';
 
 // Query Keys
-export const queryKeys = {
+const queryKeys = {
   brands: ['brands'] as const,
   brand: (id: string) => ['brand', id] as const,
-  suggestions: (brandId: string) => ['suggestions', brandId] as const,
+  playlists: ['playlists'] as const,
+  search: (query: string) => ['search', query] as const,
 };
 
 // Brand Queries
@@ -15,7 +16,6 @@ export function useBrands() {
   return useQuery({
     queryKey: queryKeys.brands,
     queryFn: () => apiClient.getBrands(),
-    staleTime: 5 * 60 * 1000, // 5 minutes
   });
 }
 
@@ -32,53 +32,40 @@ export function useCreateBrand() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (brandData: Partial<BrandProfile>) => 
+    mutationFn: (brandData: Partial<Brand>) => 
       apiClient.createBrandProfile(brandData),
     onSuccess: (newBrand) => {
-      // Update brands list
-      queryClient.setQueryData<Brand[]>(queryKeys.brands, (old = []) => [
-        ...old,
-        newBrand,
-      ]);
-      // Set the new brand profile in cache
-      queryClient.setQueryData(
-        queryKeys.brand(newBrand.id),
-        newBrand
-      );
+      queryClient.setQueryData<Brand[]>(queryKeys.brands, (old = []) => [...old, newBrand]);
     },
   });
 }
 
 export function useSuggestMusic() {
-  const queryClient = useQueryClient();
-
   return useMutation({
-    mutationFn: (brandProfile: BrandProfile) => 
+    mutationFn: (brandProfile: BrandProfile) =>
       apiClient.suggestMusic(brandProfile),
-    onSuccess: (suggestions, brandProfile) => {
-      queryClient.setQueryData(
-        queryKeys.suggestions(brandProfile.id),
-        suggestions
-      );
-    },
   });
 }
 
 export function useCreatePlaylist() {
   return useMutation({
-    mutationFn: ({ brandId, suggestions }: {
-      brandId: string;
-      suggestions: MusicSuggestion[];
-    }) => apiClient.createPlaylist(brandId, suggestions),
+    mutationFn: ({ brandId, suggestions }: { brandId: string; suggestions: MusicSuggestion[] }) =>
+      apiClient.createPlaylist(brandId, suggestions),
   });
 }
 
-// Track Search Query
-export function useTrackSearch(query: string) {
+// Playlist Queries
+export function useSpotifyPlaylists() {
   return useQuery({
-    queryKey: ['tracks', query],
+    queryKey: queryKeys.playlists,
+    queryFn: () => apiClient.getPlaylists(),
+  });
+}
+
+export function useSpotifySearch(query: string) {
+  return useQuery({
+    queryKey: queryKeys.search(query),
     queryFn: () => apiClient.searchTracks(query),
     enabled: Boolean(query),
-    staleTime: 60 * 1000, // 1 minute
   });
 }
