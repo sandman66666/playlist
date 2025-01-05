@@ -1,19 +1,37 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { PlaylistTrack } from '../types';
 import config from '../config';
 
-function Dashboard() {
+interface Playlist {
+  id: string;
+  name: string;
+  images?: Array<{
+    url: string;
+    height: number;
+    width: number;
+  }>;
+  tracks?: {
+    total: number;
+  };
+  owner?: {
+    display_name: string;
+  };
+  is_owner: boolean;
+}
+
+const Dashboard: React.FC = () => {
   const { logout, getAuthHeader } = useAuth();
-  const [playlists, setPlaylists] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
-  const [searchLoading, setSearchLoading] = useState(false);
-  const [selectedSong, setSelectedSong] = useState(null);
-  const [showPlaylistModal, setShowPlaylistModal] = useState(false);
-  const [addingToPlaylist, setAddingToPlaylist] = useState(false);
+  const [playlists, setPlaylists] = useState<Playlist[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [searchResults, setSearchResults] = useState<PlaylistTrack[]>([]);
+  const [searchLoading, setSearchLoading] = useState<boolean>(false);
+  const [selectedSong, setSelectedSong] = useState<PlaylistTrack | null>(null);
+  const [showPlaylistModal, setShowPlaylistModal] = useState<boolean>(false);
+  const [addingToPlaylist, setAddingToPlaylist] = useState<boolean>(false);
 
   const fetchPlaylists = useCallback(async () => {
     try {
@@ -36,10 +54,13 @@ function Dashboard() {
 
       const data = await response.json();
       setPlaylists(data.playlists || []);
-    } catch (error) {
-      console.error('Error fetching playlists:', error);
-      setError(error.message);
-      if (error.message.includes('authentication') || error.message.includes('token')) {
+    } catch (err) {
+      console.error('Error fetching playlists:', err);
+      setError(err instanceof Error ? err.message : 'An unknown error occurred');
+      if (err instanceof Error && (
+        err.message.includes('authentication') || 
+        err.message.includes('token')
+      )) {
         logout();
       }
     } finally {
@@ -61,12 +82,15 @@ function Dashboard() {
         throw new Error('No valid authentication');
       }
 
-      const response = await fetch(`${config.apiBaseUrl}${config.endpoints.playlist.search}?q=${encodeURIComponent(searchQuery)}`, {
-        headers: {
-          'Authorization': authHeader,
-          'Content-Type': 'application/json'
+      const response = await fetch(
+        `${config.apiBaseUrl}${config.endpoints.playlist.search}?q=${encodeURIComponent(searchQuery)}`,
+        {
+          headers: {
+            'Authorization': authHeader,
+            'Content-Type': 'application/json'
+          }
         }
-      });
+      );
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => null);
@@ -75,15 +99,15 @@ function Dashboard() {
 
       const data = await response.json();
       setSearchResults(data.tracks || []);
-    } catch (error) {
-      console.error('Error searching songs:', error);
-      setError(`Error searching songs: ${error.message}`);
+    } catch (err) {
+      console.error('Error searching songs:', err);
+      setError(`Error searching songs: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setSearchLoading(false);
     }
   }, [searchQuery, getAuthHeader]);
 
-  const addToPlaylist = async (playlistId) => {
+  const addToPlaylist = async (playlistId: string) => {
     if (!selectedSong) return;
 
     try {
@@ -93,29 +117,31 @@ function Dashboard() {
         throw new Error('No valid authentication');
       }
 
-      const response = await fetch(`${config.apiBaseUrl}${config.endpoints.playlist.addTracks(playlistId)}`, {
-        method: 'POST',
-        headers: {
-          'Authorization': authHeader,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          uris: [selectedSong.uri]
-        })
-      });
+      const response = await fetch(
+        `${config.apiBaseUrl}${config.endpoints.playlist.addTracks(playlistId)}`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': authHeader,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            uris: [selectedSong.uri]
+          })
+        }
+      );
 
       if (!response.ok) {
         throw new Error('Failed to add song to playlist');
       }
 
-      // Refresh playlists to show updated track count
       await fetchPlaylists();
       setShowPlaylistModal(false);
       setSelectedSong(null);
       alert('Song added to playlist successfully!');
-    } catch (error) {
-      console.error('Error adding song to playlist:', error);
-      setError(error.message);
+    } catch (err) {
+      console.error('Error adding song to playlist:', err);
+      setError(err instanceof Error ? err.message : 'An unknown error occurred');
     } finally {
       setAddingToPlaylist(false);
     }
@@ -150,10 +176,16 @@ function Dashboard() {
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold">Your Playlists</h1>
         <div className="space-x-4">
-          <Link to="/brands" className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600">
+          <Link 
+            to="/brands" 
+            className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+          >
             Brand Profiles
           </Link>
-          <button onClick={logout} className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600">
+          <button 
+            onClick={logout} 
+            className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+          >
             Logout
           </button>
         </div>
@@ -288,6 +320,6 @@ function Dashboard() {
       )}
     </div>
   );
-}
+};
 
 export default Dashboard;

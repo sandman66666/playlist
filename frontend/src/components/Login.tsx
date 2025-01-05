@@ -3,9 +3,9 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import config from '../config';
 
-function Login() {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+const Login: React.FC = () => {
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string>('');
   const { token } = useAuth();
 
   const initiateLogin = useCallback(async () => {
@@ -31,7 +31,7 @@ function Login() {
         throw new Error(`Failed to get login URL: ${response.status} ${errorText}`);
       }
 
-      const data = await response.json();
+      const data: { auth_url: string } = await response.json();
       console.log('Received auth data:', { hasAuthUrl: !!data.auth_url });
       
       if (!data.auth_url) {
@@ -50,9 +50,9 @@ function Login() {
       console.log('Redirecting to Spotify authorization URL...');
       // Directly navigate to Spotify's authorization URL
       window.location.href = data.auth_url;
-    } catch (error) {
-      console.error('Login process failed:', error);
-      setError(error.message || 'Failed to connect to Spotify');
+    } catch (err) {
+      console.error('Login process failed:', err);
+      setError(err instanceof Error ? err.message : 'Failed to connect to Spotify');
       setLoading(false);
     }
   }, [loading]);
@@ -111,6 +111,6 @@ function Login() {
       </div>
     </div>
   );
-}
+};
 
 export default Login;

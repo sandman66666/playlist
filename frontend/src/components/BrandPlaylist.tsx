@@ -2,12 +2,30 @@ import React, { useState, useEffect, useCallback, memo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import config from '../config';
+import { Brand, BrandProfile } from '../types';
 
-// Separate AddBrandForm component to prevent re-renders
-const AddBrandForm = memo(({ onSubmit, onCancel, loading }) => {
+interface MusicSuggestion {
+  track: string;
+  artist: string;
+  reason: string;
+  spotify_data?: {
+    uri: string;
+    preview_url?: string;
+    external_url?: string;
+  };
+}
+
+interface AddBrandFormProps {
+  onSubmit: (brandName: string) => Promise<void>;
+  onCancel: () => void;
+  loading: boolean;
+}
+
+// Separate AddBrandForm component
+const AddBrandForm: React.FC<AddBrandFormProps> = memo(({ onSubmit, onCancel, loading }) => {
   const [brandName, setBrandName] = useState('');
 
-  const handleSubmit = useCallback((e) => {
+  const handleSubmit = useCallback((e: React.FormEvent) => {
     e.preventDefault();
     onSubmit(brandName);
   }, [brandName, onSubmit]);
@@ -51,12 +69,24 @@ const AddBrandForm = memo(({ onSubmit, onCancel, loading }) => {
   );
 });
 
-// Separate VerifyBrandForm component
-const VerifyBrandForm = memo(({ brandProfile, brandDescription, onBack, onSubmit, loading, onDescriptionChange }) => {
-  const handleDescriptionChange = useCallback((e) => {
-    onDescriptionChange(e.target.value);
-  }, [onDescriptionChange]);
+interface VerifyBrandFormProps {
+  brandProfile: BrandProfile | null;
+  brandDescription: string;
+  onBack: () => void;
+  onSubmit: () => void;
+  loading: boolean;
+  onDescriptionChange: (value: string) => void;
+}
 
+// Separate VerifyBrandForm component
+const VerifyBrandForm: React.FC<VerifyBrandFormProps> = memo(({
+  brandProfile,
+  brandDescription,
+  onBack,
+  onSubmit,
+  loading,
+  onDescriptionChange
+}) => {
   return (
     <div className="mb-8 p-6 bg-white rounded-lg shadow-md">
       <h3 className="text-xl font-semibold mb-4">Verify Brand Information</h3>
@@ -67,7 +97,7 @@ const VerifyBrandForm = memo(({ brandProfile, brandDescription, onBack, onSubmit
           </label>
           <textarea
             value={brandDescription}
-            onChange={handleDescriptionChange}
+            onChange={(e) => onDescriptionChange(e.target.value)}
             className="w-full p-2 border border-gray-300 rounded-md min-h-[100px]"
             placeholder="Brand description..."
             disabled={loading}
@@ -97,8 +127,12 @@ const VerifyBrandForm = memo(({ brandProfile, brandDescription, onBack, onSubmit
   );
 });
 
+interface BrandProfileDisplayProps {
+  brandProfile: BrandProfile | null;
+}
+
 // Separate BrandProfileDisplay component
-const BrandProfileDisplay = memo(({ brandProfile }) => {
+const BrandProfileDisplay: React.FC<BrandProfileDisplayProps> = memo(({ brandProfile }) => {
   if (!brandProfile) return null;
 
   return (
@@ -108,11 +142,11 @@ const BrandProfileDisplay = memo(({ brandProfile }) => {
         <div className="space-y-2">
           <div>
             <p className="font-medium text-sm text-gray-600">Core Identity</p>
-            <p>{brandProfile.brand_essence?.core_identity}</p>
+            <p>{brandProfile.brand_essence.core_identity}</p>
           </div>
           <div>
             <p className="font-medium text-sm text-gray-600">Brand Voice</p>
-            <p>{brandProfile.brand_essence?.brand_voice}</p>
+            <p>{brandProfile.brand_essence.brand_voice}</p>
           </div>
         </div>
       </div>
@@ -120,21 +154,16 @@ const BrandProfileDisplay = memo(({ brandProfile }) => {
       <div>
         <h4 className="text-lg font-medium mb-2">Brand Values</h4>
         <ul className="list-disc pl-5 space-y-1">
-          {brandProfile.brand_values?.map((value, idx) => (
+          {brandProfile.cultural_positioning.core_values.map((value, idx) => (
             <li key={idx} className="text-gray-700">{value}</li>
           ))}
         </ul>
       </div>
 
       <div>
-        <h4 className="text-lg font-medium mb-2">Target Audience</h4>
-        <p className="text-gray-700">{brandProfile.target_audience}</p>
-      </div>
-
-      <div>
         <h4 className="text-lg font-medium mb-2">Aesthetic Pillars</h4>
         <ul className="list-disc pl-5 space-y-1">
-          {brandProfile.aesthetic_pillars?.visual_language?.map((pillar, idx) => (
+          {brandProfile.aesthetic_pillars.visual_language.map((pillar, idx) => (
             <li key={idx} className="text-gray-700">{pillar}</li>
           ))}
         </ul>
@@ -143,8 +172,18 @@ const BrandProfileDisplay = memo(({ brandProfile }) => {
   );
 });
 
+interface SuggestedTracksProps {
+  suggestions: MusicSuggestion[];
+  onCreatePlaylist: () => Promise<void>;
+  loading: boolean;
+}
+
 // Separate SuggestedTracks component
-const SuggestedTracks = memo(({ suggestions, onCreatePlaylist, loading }) => {
+const SuggestedTracks: React.FC<SuggestedTracksProps> = memo(({
+  suggestions,
+  onCreatePlaylist,
+  loading
+}) => {
   if (!suggestions.length) return null;
 
   return (
@@ -181,19 +220,18 @@ const SuggestedTracks = memo(({ suggestions, onCreatePlaylist, loading }) => {
 });
 
 // Main BrandPlaylist component
-function BrandPlaylist() {
+const BrandPlaylist: React.FC = () => {
   const navigate = useNavigate();
   const { token, logout, getAuthHeader } = useAuth();
-  const [brands, setBrands] = useState([]);
-  const [selectedBrand, setSelectedBrand] = useState(null);
-  const [brandProfile, setBrandProfile] = useState(null);
-  const [suggestions, setSuggestions] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [existingPlaylists, setExistingPlaylists] = useState([]);
-  const [showAddBrandForm, setShowAddBrandForm] = useState(false);
-  const [brandDescription, setBrandDescription] = useState('');
-  const [verifyingBrand, setVerifyingBrand] = useState(false);
+  const [brands, setBrands] = useState<Brand[]>([]);
+  const [selectedBrand, setSelectedBrand] = useState<string | null>(null);
+  const [brandProfile, setBrandProfile] = useState<BrandProfile | null>(null);
+  const [suggestions, setSuggestions] = useState<MusicSuggestion[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string>('');
+  const [showAddBrandForm, setShowAddBrandForm] = useState<boolean>(false);
+  const [brandDescription, setBrandDescription] = useState<string>('');
+  const [verifyingBrand, setVerifyingBrand] = useState<boolean>(false);
 
   const fetchBrands = useCallback(async () => {
     if (!token) return;
@@ -214,56 +252,7 @@ function BrandPlaylist() {
     }
   }, [token]);
 
-  const fetchExistingPlaylists = useCallback(async () => {
-    try {
-      const authHeader = await getAuthHeader();
-      if (!authHeader) {
-        throw new Error('No valid token available');
-      }
-
-      const response = await fetch(`${config.apiBaseUrl}${config.endpoints.playlist.user}`, {
-        headers: {
-          'Authorization': authHeader,
-          'Content-Type': 'application/json'
-        }
-      });
-      if (!response.ok) {
-        throw new Error('Failed to fetch playlists');
-      }
-      const data = await response.json();
-      setExistingPlaylists(data.playlists || []);
-    } catch (err) {
-      console.error('Error fetching playlists:', err);
-      if (err.message.includes('token')) {
-        logout();
-      }
-    }
-  }, [getAuthHeader, logout]);
-
-  useEffect(() => {
-    let mounted = true;
-    
-    if (token) {
-      const loadInitialData = async () => {
-        try {
-          await Promise.all([
-            fetchBrands(),
-            fetchExistingPlaylists()
-          ]);
-        } catch (error) {
-          console.error('Error loading initial data:', error);
-        }
-      };
-      
-      loadInitialData();
-    }
-    
-    return () => {
-      mounted = false;
-    };
-  }, [token, fetchBrands, fetchExistingPlaylists]);
-
-  const handleBrandSelect = useCallback(async (brandId) => {
+  const handleBrandSelect = useCallback(async (brandId: string) => {
     if (!brandId) return;
     try {
       setLoading(true);
@@ -280,7 +269,7 @@ function BrandPlaylist() {
       setSuggestions(profileData.suggested_songs || []);
     } catch (err) {
       console.error('Error:', err);
-      setError(err.message);
+      setError(err instanceof Error ? err.message : 'An unknown error occurred');
       setBrandProfile(null);
       setSuggestions([]);
     } finally {
@@ -288,7 +277,7 @@ function BrandPlaylist() {
     }
   }, []);
 
-  const handleGetBrandDescription = useCallback(async (brandName) => {
+  const handleGetBrandDescription = useCallback(async (brandName: string) => {
     try {
       setLoading(true);
       setError('');
@@ -310,13 +299,15 @@ function BrandPlaylist() {
       setVerifyingBrand(true);
     } catch (err) {
       console.error('Error:', err);
-      setError(err.message || 'Failed to get brand description. Please try again later.');
+      setError(err instanceof Error ? err.message : 'Failed to get brand description');
     } finally {
       setLoading(false);
     }
   }, []);
 
   const handleCreateBrand = useCallback(async () => {
+    if (!brandProfile) return;
+    
     try {
       setLoading(true);
       setError('');
@@ -344,13 +335,15 @@ function BrandPlaylist() {
       handleBrandSelect(data.brand_id);
     } catch (err) {
       console.error('Error:', err);
-      setError(err.message || 'Failed to create brand. Please try again later.');
+      setError(err instanceof Error ? err.message : 'Failed to create brand');
     } finally {
       setLoading(false);
     }
   }, [brandProfile, brandDescription, fetchBrands, handleBrandSelect]);
 
   const createPlaylist = useCallback(async () => {
+    if (!selectedBrand) return;
+    
     try {
       setLoading(true);
       setError('');
@@ -378,26 +371,24 @@ function BrandPlaylist() {
       }
 
       const data = await response.json();
-      await fetchExistingPlaylists();
       alert(`Playlist ${data.playlist_url ? 'updated' : 'created'} successfully! You can find it at: ${data.playlist_url}`);
     } catch (err) {
       console.error('Error:', err);
-      if (err.message.includes('token')) {
+      if (err instanceof Error && err.message.includes('token')) {
         logout();
       } else {
-        setError(err.message || 'Failed to create playlist. Please try again later.');
+        setError(err instanceof Error ? err.message : 'Failed to create playlist');
       }
     } finally {
       setLoading(false);
     }
-  }, [selectedBrand, suggestions, getAuthHeader, fetchExistingPlaylists, logout]);
+  }, [selectedBrand, suggestions, getAuthHeader, logout]);
 
-  const handleAddBrandClick = useCallback(() => {
-    setShowAddBrandForm(true);
-    setVerifyingBrand(false);
-    setBrandDescription('');
-    setBrandProfile(null);
-  }, []);
+  useEffect(() => {
+    if (token) {
+      fetchBrands();
+    }
+  }, [token, fetchBrands]);
 
   if (!token) {
     return (
@@ -446,7 +437,11 @@ function BrandPlaylist() {
 
         {/* Add Brand Button */}
         <button
-          onClick={handleAddBrandClick}
+          onClick={() => {
+            setShowAddBrandForm(true);
+            setVerifyingBrand(false);
+            setBrandProfile(null);
+          }}
           className="text-blue-600 hover:text-blue-800 font-medium"
         >
           + Add New Brand
@@ -463,7 +458,7 @@ function BrandPlaylist() {
       )}
 
       {/* Brand Verification Form */}
-      {showAddBrandForm && verifyingBrand && (
+      {showAddBrandForm && verifyingBrand && brandProfile && (
         <VerifyBrandForm
           brandProfile={brandProfile}
           brandDescription={brandDescription}
@@ -485,8 +480,8 @@ function BrandPlaylist() {
         <>
           <div className="mb-8 p-6 bg-white rounded-lg shadow-md">
             <h3 className="text-2xl font-semibold mb-4">{brandProfile.brand}</h3>
-            {brandProfile.description && (
-              <p className="text-gray-600 mb-6">{brandProfile.description}</p>
+            {brandDescription && (
+              <p className="text-gray-600 mb-6">{brandDescription}</p>
             )}
             <BrandProfileDisplay brandProfile={brandProfile} />
           </div>
@@ -500,6 +495,6 @@ function BrandPlaylist() {
       )}
     </div>
   );
-}
+};
 
 export default BrandPlaylist;

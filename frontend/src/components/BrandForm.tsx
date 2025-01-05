@@ -4,16 +4,24 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { BrandProfile } from '../types';
 
-const BrandForm = () => {
-  const [brandName, setBrandName] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState('');
-  const [step, setStep] = useState('input'); // input, verify, complete
-  const [brandDescription, setBrandDescription] = useState('');
-  const [brandProfile, setBrandProfile] = useState(null);
+type Step = 'input' | 'verify' | 'complete';
 
-  const handleGetDescription = async () => {
+interface BrandDescription {
+  description: string;
+  profile: BrandProfile;
+}
+
+const BrandForm: React.FC = () => {
+  const [brandName, setBrandName] = useState<string>('');
+  const [loading, setLoading] = useState<boolean>(false);
+  const [message, setMessage] = useState<string>('');
+  const [step, setStep] = useState<Step>('input');
+  const [brandDescription, setBrandDescription] = useState<string>('');
+  const [brandProfile, setBrandProfile] = useState<BrandProfile | null>(null);
+
+  const handleGetDescription = async (): Promise<void> => {
     setLoading(true);
     setMessage('');
 
@@ -30,18 +38,18 @@ const BrandForm = () => {
         throw new Error('Failed to get brand description');
       }
 
-      const data = await response.json();
+      const data: BrandDescription = await response.json();
       setBrandDescription(data.description);
       setBrandProfile(data.profile);
       setStep('verify');
-    } catch (error) {
-      setMessage(`Error: ${error.message}`);
+    } catch (err) {
+      setMessage(`Error: ${err instanceof Error ? err.message : 'Unknown error occurred'}`);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
     setLoading(true);
     setMessage('');
@@ -105,8 +113,8 @@ const BrandForm = () => {
       const playlist = await playlistResponse.json();
       setMessage(`Successfully created playlist! View it on Spotify: ${playlist.playlist_url}`);
       setStep('complete');
-    } catch (error) {
-      setMessage(`Error: ${error.message}`);
+    } catch (err) {
+      setMessage(`Error: ${err instanceof Error ? err.message : 'Unknown error occurred'}`);
     } finally {
       setLoading(false);
     }
@@ -126,14 +134,10 @@ const BrandForm = () => {
         <div className="space-y-2">
           <h4 className="font-medium">Brand Values</h4>
           <ul className="list-disc list-inside text-sm">
-            {brandProfile.brand_values?.map((value, index) => (
+            {brandProfile.cultural_positioning.core_values.map((value, index) => (
               <li key={index}>{value}</li>
             ))}
           </ul>
-        </div>
-        <div className="space-y-2">
-          <h4 className="font-medium">Target Audience</h4>
-          <p className="text-sm">{brandProfile.target_audience}</p>
         </div>
         <div className="space-y-2">
           <h4 className="font-medium">Aesthetic Pillars</h4>
