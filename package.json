@@ -31,5 +31,10 @@
   "license": "MIT",
   "devDependencies": {
     "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.62.15",
+    "@tanstack/react-query-devtools": "^5.62.15",
+    "axios": "^1.7.9"
   }
 }
