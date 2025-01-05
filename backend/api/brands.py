@@ -1,11 +1,12 @@
-from fastapi import APIRouter, HTTPException, Header
+from fastapi import APIRouter, HTTPException, Header, Depends
 from typing import Dict, List
 import json
 import os
-from pathlib import Path
 import logging
 import random
 import asyncio
+import traceback
+from sqlalchemy.orm import Session
 
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
@@ -14,120 +15,152 @@ from dotenv import load_dotenv
 # For Anthropic
 from anthropic import Anthropic, HUMAN_PROMPT, AI_PROMPT
 
+# Import database and models
+from ..database import get_db
+from ..models import BrandProfile
+
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-BRAND_PROFILES_DIR = Path(__file__).parent.parent / "data" / "brand_profiles"
-
 @router.get("")
-async def get_all_brands():
+async def get_all_brands(db: Session = Depends(get_db)):
+    """Get all brand profiles"""
     try:
-        if not BRAND_PROFILES_DIR.exists():
-            BRAND_PROFILES_DIR.mkdir(parents=True, exist_ok=True)
-            return {"brands": []}
-        
-        brand_files = list(BRAND_PROFILES_DIR.glob("*.json"))
-        brands = []
-        
-        for file in brand_files:
-            with open(file, 'r') as f:
-                brand_data = json.load(f)
-                brands.append({
-                    "id": file.stem,
-                    "name": brand_data.get("brand", file.stem),
-                    "description": brand_data.get("description", ""),
-                    "core_identity": brand_data.get("brand_essence", {}).get("core_identity", "")
-                })
-        
-        return {"brands": brands}
+        brands = db.query(BrandProfile).all()
+        return {
+            "brands": [{
+                "id": brand.id,
+                "name": brand.name,
+                "description": brand.data.get("description", ""),
+                "core_identity": brand.data.get("brand_essence", {}).get("core_identity", ""),
+                "status": brand.data.get("status", "pending_approval")
+            } for brand in brands]
+        }
     except Exception as e:
         logger.error(f"Error getting brands: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/{brand_id}")
-async def get_brand_profile(brand_id: str):
+async def get_brand_profile(brand_id: str, db: Session = Depends(get_db)):
+    """Get a specific brand profile"""
     try:
-        file_path = BRAND_PROFILES_DIR / f"{brand_id}.json"
-        if not file_path.exists():
+        brand = db.query(BrandProfile).filter(BrandProfile.id == brand_id).first()
+        if not brand:
             raise HTTPException(status_code=404, detail=f"Brand not found: {brand_id}")
-        
-        with open(file_path, 'r') as f:
-            return json.load(f)
+        return brand.data
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error getting brand {brand_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/describe")
-async def get_brand_description(brand_data: Dict):
+async def generate_brand_profile(brand_name: str) -> Dict:
+    """Generate comprehensive brand profile using Claude"""
     try:
-        logger.info("Starting brand description endpoint")
-        brand_name = brand_data.get("brand")
-        if not brand_name:
-            raise HTTPException(status_code=400, detail="Brand name required")
-
+        logger.info(f"Starting brand profile generation for {brand_name}")
+        
         api_key = os.getenv("ANTHROPIC_API_KEY")
         if not api_key:
-            logger.error("ANTHROPIC_API_KEY not found")
+            logger.error("ANTHROPIC_API_KEY not found in environment variables")
             raise ValueError("ANTHROPIC_API_KEY not set")
 
+        logger.info("Initializing Anthropic client")
         client = Anthropic(api_key=api_key.strip())
-
-        # Add delay before making API call
         await asyncio.sleep(1)
 
-        # Get brand description and profile from Claude with Gucci-like format
         user_prompt = f"""
 You are a luxury brand strategist. For the brand "{brand_name}", create a detailed brand profile following this exact JSON structure:
 
 {{
-    "description": "A concise 2-3 sentence description of the brand's market position and essence",
-    "profile": {{
-        "brand_essence": {{
-            "core_identity": "One sentence capturing the brand's fundamental essence",
-            "brand_voice": "Description of how the brand communicates",
-            "brand_personality": "Key personality traits that define the brand"
-        }},
-        "brand_values": [
-            "Value 1",
-            "Value 2",
-            "Value 3",
-            "Value 4"
+    "brand": "{brand_name}",
+    "description": "A comprehensive description of the brand's identity, heritage, and market position",
+    "brand_essence": {{
+        "core_identity": "Key brand identity traits",
+        "heritage": "Brand's history and heritage statement",
+        "brand_voice": "Brand's communication style and tone"
+    }},
+    "aesthetic_pillars": {{
+        "visual_language": [
+            "Key visual element 1",
+            "Key visual element 2",
+            "Key visual element 3",
+            "Key visual element 4",
+            "Key visual element 5"
         ],
-        "target_audience": {{
-            "primary": "Description of core customer segment",
-            "psychographics": "Lifestyle, values, and aspirations of target customers",
-            "demographics": "Key demographic characteristics"
-        }},
-        "aesthetic_pillars": {{
-            "visual_language": [
-                "Key visual element 1",
-                "Key visual element 2",
-                "Key visual element 3",
-                "Key visual element 4"
-            ],
-            "design_principles": [
-                "Design principle 1",
-                "Design principle 2",
-                "Design principle 3"
-            ]
-        }},
-        "brand_expression": {{
-            "tone_of_voice": "Description of brand's communication style",
-            "key_messages": [
-                "Message 1",
-                "Message 2",
-                "Message 3"
-            ]
-        }}
-    }}
+        "emotional_attributes": [
+            "Emotional attribute 1",
+            "Emotional attribute 2",
+            "Emotional attribute 3",
+            "Emotional attribute 4",
+            "Emotional attribute 5"
+        ],
+        "signature_elements": [
+            "Signature element 1",
+            "Signature element 2",
+            "Signature element 3",
+            "Signature element 4",
+            "Signature element 5"
+        ]
+    }},
+    "cultural_positioning": {{
+        "philosophy": "Brand philosophy statement",
+        "core_values": [
+            "Core value 1",
+            "Core value 2",
+            "Core value 3",
+            "Core value 4",
+            "Core value 5"
+        ],
+        "cultural_codes": [
+            "Cultural code 1",
+            "Cultural code 2",
+            "Cultural code 3",
+            "Cultural code 4",
+            "Cultural code 5"
+        ]
+    }},
+    "target_mindset": {{
+        "aspirations": [
+            "Aspiration 1",
+            "Aspiration 2",
+            "Aspiration 3",
+            "Aspiration 4",
+            "Aspiration 5"
+        ],
+        "lifestyle_attributes": [
+            "Lifestyle attribute 1",
+            "Lifestyle attribute 2",
+            "Lifestyle attribute 3",
+            "Lifestyle attribute 4",
+            "Lifestyle attribute 5"
+        ]
+    }},
+    "brand_expressions": {{
+        "tone": [
+            "Tone attribute 1",
+            "Tone attribute 2",
+            "Tone attribute 3",
+            "Tone attribute 4",
+            "Tone attribute 5"
+        ],
+        "experience": [
+            "Experience element 1",
+            "Experience element 2",
+            "Experience element 3",
+            "Experience element 4",
+            "Experience element 5"
+        ]
+    }},
+    "status": "pending_approval"
 }}
 
-Ensure the response is valid JSON and maintains this exact structure. Make the content sophisticated and fitting for a luxury/premium brand positioning.
+Ensure the response is valid JSON and maintains this exact structure. Make the content sophisticated and fitting for a luxury/premium brand positioning. Replace all placeholder text with actual, meaningful content specific to {brand_name}. If you don't have enough information about the brand, indicate this in the description field and I will fall back to manual input.
 """
 
+        logger.info("Sending request to Claude API")
         prompt = f"{HUMAN_PROMPT}{user_prompt}{AI_PROMPT}"
         response = client.completions.create(
             model="claude-2",
@@ -136,74 +169,150 @@ Ensure the response is valid JSON and maintains this exact structure. Make the c
             stop_sequences=[HUMAN_PROMPT]
         )
 
-        # Add delay after API call
         await asyncio.sleep(1)
 
-        # Parse the response and extract JSON
+        logger.info("Processing Claude API response")
         text_response = response.completion
-        try:
-            # Find JSON content between curly braces
-            json_start = text_response.find('{')
-            json_end = text_response.rfind('}') + 1
-            if json_start >= 0 and json_end > json_start:
-                json_content = text_response[json_start:json_end]
+        logger.info(f"Raw response from Claude: {text_response}")
+
+        json_start = text_response.find('{')
+        json_end = text_response.rfind('}') + 1
+        
+        if json_start >= 0 and json_end > json_start:
+            json_content = text_response[json_start:json_end]
+            try:
                 data = json.loads(json_content)
-            else:
-                # Fallback structure matching Gucci format
-                data = {
-                    "description": "",
-                    "profile": {
-                        "brand_essence": {
-                            "core_identity": "",
-                            "brand_voice": "",
-                            "brand_personality": ""
-                        },
-                        "brand_values": [],
-                        "target_audience": {
-                            "primary": "",
-                            "psychographics": "",
-                            "demographics": ""
-                        },
-                        "aesthetic_pillars": {
-                            "visual_language": [],
-                            "design_principles": []
-                        },
-                        "brand_expression": {
-                            "tone_of_voice": "",
-                            "key_messages": []
-                        }
-                    }
-                }
-
-                # Parse the response manually if needed
-                lines = text_response.split('\n')
-                current_section = None
-                for line in lines:
-                    line = line.strip()
-                    if not line:
-                        continue
+                logger.info("Successfully parsed JSON response")
+                
+                # Check if Claude indicated insufficient information
+                description = data.get("description", "").lower()
+                if "don't have enough information" in description or "insufficient information" in description:
+                    logger.info("Claude indicated insufficient information")
+                    raise ValueError("Insufficient brand information")
                     
-                    if line.startswith('Description:'):
-                        data['description'] = line.replace('Description:', '').strip()
-                    elif line.startswith('Core Identity:'):
-                        data['profile']['brand_essence']['core_identity'] = line.replace('Core Identity:', '').strip()
-                    elif line.startswith('Brand Voice:'):
-                        data['profile']['brand_essence']['brand_voice'] = line.replace('Brand Voice:', '').strip()
-                    # Add more manual parsing if needed
-
-        except Exception as e:
-            logger.error(f"Error parsing Claude response: {str(e)}")
-            raise HTTPException(status_code=500, detail="Failed to parse brand profile")
-
-        return data
+                return data
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse JSON: {str(e)}")
+                logger.error(f"JSON content: {json_content}")
+                raise
+        else:
+            logger.error("No JSON content found in Claude response")
+            raise ValueError("Failed to extract valid JSON from Claude response")
 
     except Exception as e:
-        logger.error(f"Error in describe endpoint: {str(e)}", exc_info=True)
+        logger.error(f"Error generating brand profile: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise
+
+@router.post("")
+async def create_brand_profile(brand_data: Dict, db: Session = Depends(get_db)):
+    """Create a new brand profile with Claude-generated assessment"""
+    try:
+        logger.info(f"Starting brand profile creation for: {brand_data}")
+        
+        if "brand" not in brand_data:
+            raise HTTPException(status_code=400, detail="Brand name required")
+        
+        brand_id = brand_data["brand"].lower().replace(" ", "_")
+        
+        # Check if brand already exists
+        existing_brand = db.query(BrandProfile).filter(BrandProfile.id == brand_id).first()
+        if existing_brand:
+            raise HTTPException(status_code=400, detail=f"Brand exists: {brand_id}")
+
+        try:
+            # Try to generate profile with Claude
+            logger.info("Generating brand profile with Claude")
+            brand_profile = await generate_brand_profile(brand_data["brand"])
+            needs_manual_input = False
+        except Exception as e:
+            logger.warning(f"Claude generation failed: {str(e)}")
+            # Fall back to manual input template
+            needs_manual_input = True
+            brand_profile = {
+                "brand": brand_data["brand"],
+                "description": "",
+                "brand_essence": {
+                    "core_identity": "",
+                    "heritage": "",
+                    "brand_voice": ""
+                },
+                "aesthetic_pillars": {
+                    "visual_language": ["", "", "", "", ""],
+                    "emotional_attributes": ["", "", "", "", ""],
+                    "signature_elements": ["", "", "", "", ""]
+                },
+                "cultural_positioning": {
+                    "philosophy": "",
+                    "core_values": ["", "", "", "", ""],
+                    "cultural_codes": ["", "", "", "", ""]
+                },
+                "target_mindset": {
+                    "aspirations": ["", "", "", "", ""],
+                    "lifestyle_attributes": ["", "", "", "", ""]
+                },
+                "brand_expressions": {
+                    "tone": ["", "", "", "", ""],
+                    "experience": ["", "", "", "", ""]
+                },
+                "status": "pending_manual_input"
+            }
+        
+        # Create new brand profile in database
+        new_brand = BrandProfile(
+            id=brand_id,
+            name=brand_data["brand"],
+            data=brand_profile
+        )
+        db.add(new_brand)
+        db.commit()
+        
+        return {
+            "message": "Brand profile created",
+            "brand_id": brand_id,
+            "profile": brand_profile,
+            "needs_manual_input": needs_manual_input
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating brand: {str(e)}", exc_info=True)
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/{brand_id}/approve")
+async def approve_brand_profile(brand_id: str, db: Session = Depends(get_db)):
+    """Approve a brand profile to enable playlist creation"""
+    try:
+        brand = db.query(BrandProfile).filter(BrandProfile.id == brand_id).first()
+        if not brand:
+            raise HTTPException(status_code=404, detail=f"Brand not found: {brand_id}")
+
+        # Update status in the JSON data
+        brand_data = brand.data
+        brand_data["status"] = "approved"
+        brand.data = brand_data
+        
+        db.commit()
+        return {"message": "Brand profile approved"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error approving brand {brand_id}: {str(e)}")
+        db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/suggest-music")
 async def suggest_music(brand_profile: Dict):
+    """Suggest music for an approved brand profile"""
     try:
+        # Check if brand is approved
+        if brand_profile.get("status") != "approved":
+            raise HTTPException(
+                status_code=400,
+                detail="Brand profile must be approved before suggesting music"
+            )
+
         logger.info("Starting suggest-music endpoint")
         logger.info(f"Brand Profile: {brand_profile}")
         
@@ -215,20 +324,19 @@ async def suggest_music(brand_profile: Dict):
         logger.info("Got API key, initializing Anthropic client")
         client = Anthropic(api_key=api_key.strip())
 
-        # Add delay before API call
         await asyncio.sleep(1)
 
         brand_name = brand_profile.get("brand", "Unknown Brand")
         core_identity = brand_profile.get("brand_essence", {}).get("core_identity", "")
-        brand_values = brand_profile.get("brand_values", [])
-        target_audience = brand_profile.get("target_audience", "")
+        brand_values = brand_profile.get("cultural_positioning", {}).get("core_values", [])
+        target_mindset = brand_profile.get("target_mindset", {})
 
         user_prompt = f"""
 You are a music curator. Suggest 10 songs that match this brand:
 Brand: {brand_name}
 Identity: {core_identity}
 Values: {', '.join(brand_values)}
-Target Audience: {target_audience}
+Target Mindset: {json.dumps(target_mindset)}
 
 Format each suggestion as:
 Song: [title]
@@ -245,7 +353,6 @@ Why it fits: [one sentence explaining how it matches the brand values and identi
             stop_sequences=[HUMAN_PROMPT]
         )
 
-        # Add delay after API call
         await asyncio.sleep(1)
 
         text_response = response.completion
@@ -275,11 +382,8 @@ Why it fits: [one sentence explaining how it matches the brand values and identi
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/create-playlist")
-async def create_brand_playlist(payload: Dict, authorization: str = Header(None)):
-    """
-    If a playlist exists, replace half of its songs with new ones while maintaining the same total count.
-    If no playlist exists, create a new one with all suggested songs.
-    """
+async def create_brand_playlist(payload: Dict, authorization: str = Header(None), db: Session = Depends(get_db)):
+    """Create or update playlist for an approved brand"""
     try:
         if not authorization:
             raise HTTPException(status_code=401, detail="No authorization header")
@@ -291,20 +395,23 @@ async def create_brand_playlist(payload: Dict, authorization: str = Header(None)
         if not all([brand_id, suggestions]):
             raise HTTPException(status_code=422, detail="Missing required fields")
 
-        file_path = BRAND_PROFILES_DIR / f"{brand_id}.json"
-        if not file_path.exists():
+        # Get brand from database
+        brand = db.query(BrandProfile).filter(BrandProfile.id == brand_id).first()
+        if not brand:
             raise HTTPException(status_code=404, detail=f"Brand not found: {brand_id}")
 
-        # Read existing brand profile
-        with open(file_path, 'r') as f:
-            brand_profile = json.load(f)
+        # Check if brand is approved
+        if brand.data.get("status") != "approved":
+            raise HTTPException(
+                status_code=400,
+                detail="Brand profile must be approved before creating playlist"
+            )
 
         # Store suggestions in brand profile
-        brand_profile['suggested_songs'] = suggestions
-
-        # Write updated profile back to file
-        with open(file_path, 'w') as f:
-            json.dump(brand_profile, f, indent=2)
+        brand_data = brand.data
+        brand_data['suggested_songs'] = suggestions
+        brand.data = brand_data
+        db.commit()
 
         # Create Spotify client with access token
         sp = spotipy.Spotify(auth=token)
@@ -316,11 +423,10 @@ async def create_brand_playlist(payload: Dict, authorization: str = Header(None)
             logger.error(f"Error getting user profile: {str(e)}")
             raise HTTPException(status_code=401, detail="Invalid or expired token")
 
-        # Add delay before Spotify operations
         await asyncio.sleep(1)
 
-        playlist_name = f"{brand_profile['brand']} Brand Playlist"
-        description = f"A curated playlist for {brand_profile['brand']}"
+        playlist_name = f"{brand.name} Brand Playlist"
+        description = f"A curated playlist for {brand.name}"
 
         # Search for existing playlist
         existing_playlist = None
@@ -341,7 +447,6 @@ async def create_brand_playlist(payload: Dict, authorization: str = Header(None)
                 break
                 
             offset += limit
-            # Add small delay between pagination requests
             await asyncio.sleep(0.5)
 
         # Search for new tracks
@@ -349,7 +454,6 @@ async def create_brand_playlist(payload: Dict, authorization: str = Header(None)
         not_found = []
         for item in suggestions:
             try:
-                # Add small delay between track searches
                 await asyncio.sleep(0.2)
                 
                 query = f"track:{item['track']} artist:{item['artist']}"
@@ -357,7 +461,6 @@ async def create_brand_playlist(payload: Dict, authorization: str = Header(None)
                 if results['tracks']['items']:
                     track = results['tracks']['items'][0]
                     new_track_uris.append(track['uri'])
-                    # Store Spotify track data in suggestions
                     item['spotify_data'] = {
                         'uri': track['uri'],
                         'preview_url': track['preview_url'],
@@ -370,9 +473,9 @@ async def create_brand_playlist(payload: Dict, authorization: str = Header(None)
                 continue
 
         # Update brand profile with Spotify track data
-        brand_profile['suggested_songs'] = suggestions
-        with open(file_path, 'w') as f:
-            json.dump(brand_profile, f, indent=2)
+        brand_data['suggested_songs'] = suggestions
+        brand.data = brand_data
+        db.commit()
 
         if existing_playlist:
             playlist_id = existing_playlist['id']
@@ -385,7 +488,6 @@ async def create_brand_playlist(payload: Dict, authorization: str = Header(None)
                 current_tracks.extend([item['track']['uri'] for item in results['items'] if item['track']])
                 if results['next']:
                     results = sp.next(results)
-                    # Add small delay between pagination requests
                     await asyncio.sleep(0.5)
                 else:
                     break
@@ -400,7 +502,6 @@ async def create_brand_playlist(payload: Dict, authorization: str = Header(None)
                 logger.info(f"Replacing playlist tracks. Keeping {len(kept_tracks)} existing tracks")
                 all_tracks = kept_tracks + new_track_uris[:total_tracks - len(kept_tracks)]
                 
-                # Add delay before modifying playlist
                 await asyncio.sleep(1)
                 sp.playlist_replace_items(playlist_id, all_tracks)
             else:
@@ -412,7 +513,6 @@ async def create_brand_playlist(payload: Dict, authorization: str = Header(None)
         else:
             logger.info("Creating new playlist")
             try:
-                # Add delay before creating playlist
                 await asyncio.sleep(1)
                 
                 new_playlist = sp.user_playlist_create(
@@ -423,7 +523,6 @@ async def create_brand_playlist(payload: Dict, authorization: str = Header(None)
                 )
                 playlist_id = new_playlist['id']
                 if new_track_uris:
-                    # Add delay before adding tracks
                     await asyncio.sleep(1)
                     sp.playlist_add_items(playlist_id, new_track_uris)
             except Exception as e:
@@ -440,53 +539,39 @@ async def create_brand_playlist(payload: Dict, authorization: str = Header(None)
         raise
     except Exception as e:
         logger.error(f"Error creating or updating playlist: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.post("")
-async def create_brand_profile(brand_data: Dict):
-    try:
-        if "brand" not in brand_data:
-            raise HTTPException(status_code=400, detail="Brand name required")
-        
-        BRAND_PROFILES_DIR.mkdir(parents=True, exist_ok=True)
-        brand_id = brand_data["brand"].lower().replace(" ", "_")
-        file_path = BRAND_PROFILES_DIR / f"{brand_id}.json"
-
-        if file_path.exists():
-            raise HTTPException(status_code=400, detail=f"Brand exists: {brand_id}")
-
-        with open(file_path, 'w') as f:
-            json.dump(brand_data, f, indent=2)
-
-        return {"message": "Brand profile created", "brand_id": brand_id}
-    except Exception as e:
-        logger.error(f"Error creating brand: {str(e)}", exc_info=True)
+        db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.put("/{brand_id}")
-async def update_brand_profile(brand_id: str, brand_data: Dict):
+async def update_brand_profile(brand_id: str, brand_data: Dict, db: Session = Depends(get_db)):
+    """Update an existing brand profile"""
     try:
-        file_path = BRAND_PROFILES_DIR / f"{brand_id}.json"
-        if not file_path.exists():
+        brand = db.query(BrandProfile).filter(BrandProfile.id == brand_id).first()
+        if not brand:
             raise HTTPException(status_code=404, detail=f"Brand not found: {brand_id}")
 
-        with open(file_path, 'w') as f:
-            json.dump(brand_data, f, indent=2)
-
+        brand.data = brand_data
+        db.commit()
         return {"message": "Brand profile updated"}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error updating brand {brand_id}: {str(e)}")
+        db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/{brand_id}")
-async def delete_brand_profile(brand_id: str):
+async def delete_brand_profile(brand_id: str, db: Session = Depends(get_db)):
+    """Delete a brand profile"""
     try:
-        file_path = BRAND_PROFILES_DIR / f"{brand_id}.json"
-        if not file_path.exists():
+        brand = db.query(BrandProfile).filter(BrandProfile.id == brand_id).first()
+        if not brand:
             raise HTTPException(status_code=404, detail=f"Brand not found: {brand_id}")
 
-        os.remove(file_path)
+        db.delete(brand)
+        db.commit()
         return {"message": "Brand profile deleted"}
     except Exception as e:
         logger.error(f"Error deleting brand {brand_id}: {str(e)}", exc_info=True)
+        db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
